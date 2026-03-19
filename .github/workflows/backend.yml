@@ -1,0 +1,60 @@
+name: Backend CI
+
+on:
+  push:
+    paths:
+      - 'backend/**'
+    branches:
+      - main
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
+      - name: SonarCloud Scan
+        uses: SonarSource/sonarcloud-github-action@master
+        with:
+          projectBaseDir: backend
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        continue-on-error: true
+
+      - name: OWASP Dependency Check
+        uses: dependency-check/Dependency-Check_Action@main
+        with:
+          project: 'tetris-backend'
+          path: 'backend'
+          format: 'HTML'
+        continue-on-error: true
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Build and Push Backend Image
+        uses: docker/build-push-action@v5
+        with:
+          context: backend
+          push: true
+          tags: ${{ secrets.DOCKER_USERNAME }}/tetris-backend:latest
+
+      - name: Update Kubernetes Manifest
+        run: |
+          sed -i "s|image: .*/tetris-backend.*|image: ${{ secrets.DOCKER_USERNAME }}/tetris-backend:latest|g" kubernetes/backend-deployment.yml
+          git config user.email "github-actions@github.com"
+          git config user.name "GitHub Actions"
+          git add kubernetes/backend-deployment.yml
+          git diff --staged --quiet || git commit -m "Update backend image tag"
+          git push

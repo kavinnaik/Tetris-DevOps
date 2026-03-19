@@ -1,0 +1,60 @@
+name: Frontend CI
+
+on:
+  push:
+    paths:
+      - 'frontend/**'
+    branches:
+      - main
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
+      - name: SonarCloud Scan
+        uses: SonarSource/sonarcloud-github-action@master
+        with:
+          projectBaseDir: frontend
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        continue-on-error: true
+
+      - name: OWASP Dependency Check
+        uses: dependency-check/Dependency-Check_Action@main
+        with:
+          project: 'tetris-frontend'
+          path: 'frontend'
+          format: 'HTML'
+        continue-on-error: true
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Build and Push Frontend Image
+        uses: docker/build-push-action@v5
+        with:
+          context: frontend
+          push: true
+          tags: ${{ secrets.DOCKER_USERNAME }}/tetris-frontend:latest
+
+      - name: Update Kubernetes Manifest
+        run: |
+          sed -i "s|image: .*/tetris-frontend.*|image: ${{ secrets.DOCKER_USERNAME }}/tetris-frontend:latest|g" kubernetes/frontend-deployment.yml
+          git config user.email "github-actions@github.com"
+          git config user.name "GitHub Actions"
+          git add kubernetes/frontend-deployment.yml
+          git diff --staged --quiet || git commit -m "Update frontend image tag"
+          git push

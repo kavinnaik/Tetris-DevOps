@@ -1,0 +1,35 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: tetris-backend
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: tetris-backend
+  template:
+    metadata:
+      labels:
+        app: tetris-backend
+    spec:
+      containers:
+        - name: tetris-backend
+          image: kavinnaik/tetris-backend:latest
+          ports:
+            - containerPort: 5000
+          env:
+            - name: MONGO_URI
+              value: mongodb://mongodb:27017/tetris
+            - name: PORT
+              value: "5000"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: tetris-backend
+spec:
+  selector:
+    app: tetris-backend
+  ports:
+    - port: 5000
+      targetPort: 5000
